@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Data Entry — ChemMarks Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+
+        .sidebar { width: 260px; transition: transform 0.3s ease; }
+        @media (max-width: 1023px) {
+            .sidebar { transform: translateX(-100%); position: fixed; z-index: 50; height: 100vh; }
+            .sidebar.open { transform: translateX(0); }
+        }
+
+        .nav-item { transition: all 0.2s ease; }
+        .nav-item:hover { background: #f1f5f9; }
+        .nav-item.active { background: #eef2ff; color: #4f46e5; font-weight: 600; }
+        .nav-item.active .nav-icon { color: #4f46e5; }
+
+        .input-field:focus {
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+        }
+
+        .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 40; }
+        .sidebar-overlay.show { display: block; }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+        .toast {
+            background: white; border-radius: 12px; padding: 14px 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.12); border-left: 4px solid #10b981;
+            display: flex; align-items: center; gap: 10px; font-size: 14px;
+            animation: toastIn 0.35s ease forwards; min-width: 300px;
+        }
+        .toast.removing { animation: toastOut 0.3s ease forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
+
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .anim-fade { animation: fadeUp 0.5s ease forwards; }
+        .anim-delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .anim-delay-2 { animation-delay: 0.2s; opacity: 0; }
+
+        /* Upload area dashed border animation */
+        .upload-area {
+            border: 2px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover, .upload-area.drag-over {
+            border-color: #6366f1;
+            background: #eef2ff;
+        }
+
+        /* Success overlay */
+        @keyframes successPop {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .success-pop { animation: successPop 0.4s ease forwards; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <div class="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 z-50"></div>
+    <div class="toast-container" id="toastContainer"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar fixed top-1 left-0 bottom-0 bg-white border-r border-slate-200 flex flex-col pt-6" id="sidebar">
+        <div class="px-6 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
+                    <i class="fas fa-flask text-sm"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm font-bold text-slate-800 leading-tight">ChemMarks</h1>
+                    <p class="text-[10px] text-slate-400 font-medium tracking-wide uppercase">Analytics</p>
+                </div>
+            </div>
+        </div>
+        <nav class="flex-1 px-3 space-y-1">
+            <p class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Data Entry</p>
+            <a href="#" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm">
+                <i class="fas fa-th-large nav-icon text-slate-400 w-5 text-center"></i>Dashboard
+            </a>
+            <a href="#bulk" onclick="scrollToBulk(); return false;" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-cloud-arrow-up nav-icon text-slate-400 w-5 text-center"></i>Bulk Upload
+            </a>
+            <a href="#manual" onclick="scrollToManual(); return false;" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-pen-to-square nav-icon text-slate-400 w-5 text-center"></i>Manual Entry
+            </a>
+            <p class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-6">Navigation</p>
+            <a href="teacher-dashboard.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-arrow-left nav-icon text-slate-400 w-5 text-center"></i>Back to Teacher
+            </a>
+        </nav>
+        <div class="px-4 py-4 border-t border-slate-100">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-semibold text-sm">S</div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-slate-800 truncate">Staff Member</p>
+                    <p class="text-xs text-slate-400">Data Entry Role</p>
+                </div>
+                <a href="index.html" class="text-slate-400 hover:text-red-500 transition-colors" title="Logout">
+                    <i class="fas fa-right-from-bracket text-sm"></i>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="lg:ml-[260px] pt-7">
+        <header class="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 flex items-center justify-between sticky top-1 z-30">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="lg:hidden w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors">
+                    <i class="fas fa-bars text-sm"></i>
+                </button>
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800">Staff Data Entry</h2>
+                    <p class="text-xs text-slate-400">Upload marks or enter manually</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="hidden sm:inline text-xs text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg">
+                    <i class="fas fa-shield-halved mr-1.5 text-emerald-500"></i>Data Entry Access Only
+                </span>
+                <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">S</div>
+            </div>
+        </header>
+
+        <div class="p-4 sm:p-8 space-y-8">
+
+            <!-- Recent Entries Stats -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm anim-fade">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                            <i class="fas fa-file-import text-indigo-500"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400 font-medium">Today's Entries</p>
+                            <p class="text-xl font-bold text-slate-800">14</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm anim-fade anim-delay-1">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                            <i class="fas fa-cloud-arrow-up text-emerald-500"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400 font-medium">Bulk Uploads</p>
+                            <p class="text-xl font-bold text-slate-800">3</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm anim-fade anim-delay-2">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                            <i class="fas fa-pen text-amber-500"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-400 font-medium">Manual Entries</p>
+                            <p class="text-xl font-bold text-slate-800">11</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bulk Upload Section -->
+            <div id="bulk" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+                        <i class="fas fa-cloud-arrow-up text-emerald-600 text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">Bulk Upload</h3>
+                        <p class="text-xs text-slate-400">Upload marks from an Excel or CSV file</p>
+                    </div>
+                </div>
+
+                <!-- Upload drop zone -->
+                <div class="upload-area rounded-2xl p-10 text-center cursor-pointer" id="dropZone"
+                    onclick="document.getElementById('fileInput').click()"
+                    ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                    ondragleave="this.classList.remove('drag-over')"
+                    ondrop="event.preventDefault(); this.classList.remove('drag-over'); handleFileDrop(event)">
+                    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" class="hidden" onchange="handleFileSelect(event)">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-file-arrow-up text-2xl text-slate-400"></i>
+                    </div>
+                    <p class="text-sm font-semibold text-slate-700">Drop your file here or click to browse</p>
+                    <p class="text-xs text-slate-400 mt-1">Supports .xlsx, .xls, .csv — Max 5MB</p>
+                    <p id="fileName" class="text-sm font-medium text-indigo-600 mt-3 hidden"></p>
+                </div>
+
+                <!-- Template download + upload button -->
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mt-5">
+                    <button onclick="simulateUpload()" id="uploadBtn"
+                        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 px-6 rounded-xl text-sm transition-all shadow-lg shadow-emerald-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-upload mr-2"></i>Upload File
+                    </button>
+                    <button class="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                        <i class="fas fa-download mr-1.5"></i>Download Template
+                    </button>
+                    <p class="text-xs text-slate-400 sm:ml-auto"><i class="fas fa-circle-info mr-1"></i>Template must follow the prescribed column format</p>
+                </div>
+            </div>
+
+            <!-- Manual Marks Entry Form -->
+            <div id="manual" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade anim-delay-1">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center">
+                        <i class="fas fa-pen-to-square text-indigo-600 text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">Manual Marks Entry</h3>
+                        <p class="text-xs text-slate-400">Enter marks for a single student — A/L Chemistry Paper Structure</p>
+                    </div>
+                </div>
+
+                <form id="marksForm" onsubmit="handleMarksSubmit(event)" novalidate>
+                    <!-- Student Info Row -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Student Index Number <span class="text-red-400">*</span></label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i class="fas fa-hashtag text-xs"></i></span>
+                                <input type="text" id="indexNo" placeholder="e.g., 2024/CHE/004" required
+                                    class="input-field w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 bg-slate-50/50">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Exam Name / Date <span class="text-red-400">*</span></label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><i class="fas fa-calendar text-xs"></i></span>
+                                <input type="text" id="examName" placeholder="e.g., Paper 5 — 2024 Dec" required
+                                    class="input-field w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 bg-slate-50/50">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Marks Breakdown -->
+                    <div class="bg-slate-50 rounded-xl p-5 mb-6">
+                        <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <i class="fas fa-list-check"></i>Marks Breakdown
+                        </h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- MCQ -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Overall MCQ Mark</label>
+                                <div class="relative">
+                                    <input type="number" id="mcqMark" min="0" max="50" placeholder="0" required
+                                        class="input-field w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 bg-white"
+                                        oninput="updateTotal()">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">/ 50</span>
+                                </div>
+                            </div>
+                            <!-- Q5 Physical -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Q5 — Physical Chemistry</label>
+                                <div class="relative">
+                                    <input type="number" id="q5Mark" min="0" max="150" placeholder="0" required
+                                        class="input-field w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 bg-white"
+                                        oninput="updateTotal()">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">/ 150</span>
+                                </div>
+                            </div>
+                            <!-- Q6 Inorganic -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Q6 — Inorganic Chemistry</label>
+                                <div class="relative">
+                                    <input type="number" id="q6Mark" min="0" max="150" placeholder="0" required
+                                        class="input-field w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 bg-white"
+                                        oninput="updateTotal()">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">/ 150</span>
+                                </div>
+                            </div>
+                            <!-- Q7 Organic -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Q7 — Organic Chemistry</label>
+                                <div class="relative">
+                                    <input type="number" id="q7Mark" min="0" max="150" placeholder="0" required
+                                        class="input-field w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 bg-white"
+                                        oninput="updateTotal()">
+                                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-medium">/ 150</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Total -->
+                        <div class="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
+                            <span class="text-sm font-semibold text-slate-600">Total Mark</span>
+                            <div class="flex items-center gap-2">
+                                <span id="totalMark" class="text-2xl font-extrabold text-indigo-600">0</span>
+                                <span class="text-sm text-slate-400 font-medium">/ 500</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Validation message area -->
+                    <div id="formError" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm flex items-center gap-2">
+                        <i class="fas fa-circle-exclamation"></i>
+                        <span id="formErrorText"></span>
+                    </div>
+
+                    <!-- Submit -->
+                    <div class="flex items-center gap-3">
+                        <button type="submit" id="submitBtn"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-8 rounded-xl text-sm transition-all shadow-lg shadow-indigo-200 active:scale-[0.98]">
+                            <i class="fas fa-check mr-2"></i>Submit Marks
+                        </button>
+                        <button type="reset" onclick="resetForm()"
+                            class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2.5 px-6 rounded-xl text-sm transition-all">
+                            Clear Form
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Sidebar toggle
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+
+        function scrollToBulk() {
+            document.getElementById('bulk').scrollIntoView({ behavior: 'smooth' });
+            if (window.innerWidth < 1024) toggleSidebar();
+        }
+        function scrollToManual() {
+            document.getElementById('manual').scrollIntoView({ behavior: 'smooth' });
+            if (window.innerWidth < 1024) toggleSidebar();
+        }
+
+        // Toast system
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            const borderColor = type === 'success' ? '#10b981' : type === 'info' ? '#6366f1' : '#ef4444';
+            const iconClass = type === 'success' ? 'fa-circle-check text-emerald-500' : type === 'info' ? 'fa-circle-info text-indigo-500' : 'fa-circle-xmark text-red-500';
+            toast.style.borderLeftColor = borderColor;
+            toast.innerHTML = `<i class="fas ${iconClass}"></i><span class="text-slate-700">${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('removing');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // File handling
+        let fileSelected = false;
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileName').classList.remove('hidden');
+                document.getElementById('uploadBtn').disabled = false;
+                fileSelected = true;
+            }
+        }
+        function handleFileDrop(e) {
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileName').classList.remove('hidden');
+                document.getElementById('uploadBtn').disabled = false;
+                fileSelected = true;
+            }
+        }
+        function simulateUpload() {
+            const btn = document.getElementById('uploadBtn');
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i>Uploading...';
+            btn.disabled = true;
+            setTimeout(() => {
+                btn.innerHTML = '<i class="fas fa-check mr-2"></i>Uploaded Successfully';
+                btn.classList.replace('bg-emerald-600', 'bg-emerald-700');
+                showToast('Bulk upload completed. 32 student records processed successfully.');
+                setTimeout(() => {
+                    btn.innerHTML = '<i class="fas fa-upload mr-2"></i>Upload File';
+                    btn.classList.replace('bg-emerald-700', 'bg-emerald-600');
+                    btn.disabled = false;
+                    document.getElementById('fileName').classList.add('hidden');
+                    fileSelected = false;
+                }, 3000);
+            }, 1500);
+        }
+
+        // Live total calculation
+        function updateTotal() {
+            const mcq = parseFloat(document.getElementById('mcqMark').value) || 0;
+            const q5 = parseFloat(document.getElementById('q5Mark').value) || 0;
+            const q6 = parseFloat(document.getElementById('q6Mark').value) || 0;
+            const q7 = parseFloat(document.getElementById('q7Mark').value) || 0;
+            const total = mcq + q5 + q6 + q7;
+            document.getElementById('totalMark').textContent = total;
+            // Color based on performance
+            const el = document.getElementById('totalMark');
+            if (total >= 350) el.className = 'text-2xl font-extrabold text-emerald-600';
+            else if (total >= 250) el.className = 'text-2xl font-extrabold text-amber-600';
+            else if (total > 0) el.className = 'text-2xl font-extrabold text-red-600';
+            else el.className = 'text-2xl font-extrabold text-indigo-600';
+        }
+
+        // Form validation and submission
+        function handleMarksSubmit(e) {
+            e.preventDefault();
+            const errorDiv = document.getElementById('formError');
+            const errorText = document.getElementById('formErrorText');
+            errorDiv.classList.add('hidden');
+
+            const index = document.getElementById('indexNo').value.trim();
+            const exam = document.getElementById('examName').value.trim();
+            const mcq = parseFloat(document.getElementById('mcqMark').value);
+            const q5 = parseFloat(document.getElementById('q5Mark').value);
+            const q6 = parseFloat(document.getElementById('q6Mark').value);
+            const q7 = parseFloat(document.getElementById('q7Mark').value);
+
+            // Validation
+            if (!index || !exam) {
+                errorText.textContent = 'Please fill in the Student Index Number and Exam Name.';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            if (isNaN(mcq) || isNaN(q5) || isNaN(q6) || isNaN(q7)) {
+                errorText.textContent = 'All mark fields are required. Please enter valid numbers.';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            if (mcq < 0 || mcq > 50) {
+                errorText.textContent = 'MCQ mark must be between 0 and 50.';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            if (q5 < 0 || q5 > 150 || q6 < 0 || q6 > 150 || q7 < 0 || q7 > 150) {
+                errorText.textContent = 'Structured question marks must be between 0 and 150.';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Simulate submit
+            const btn = document.getElementById('submitBtn');
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i>Submitting...';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                const total = mcq + q5 + q6 + q7;
+                btn.innerHTML = '<i class="fas fa-check mr-2"></i>Submitted';
+                btn.classList.replace('bg-indigo-600', 'bg-emerald-600');
+                showToast(`Marks submitted for ${index}. Total: ${total}/500`);
+                setTimeout(() => {
+                    btn.innerHTML = '<i class="fas fa-check mr-2"></i>Submit Marks';
+                    btn.classList.replace('bg-emerald-600', 'bg-indigo-600');
+                    btn.disabled = false;
+                }, 2500);
+            }, 1000);
+        }
+
+        function resetForm() {
+            document.getElementById('totalMark').textContent = '0';
+            document.getElementById('totalMark').className = 'text-2xl font-extrabold text-indigo-600';
+            document.getElementById('formError').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
