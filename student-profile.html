@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Analytics — ChemMarks Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+
+        .sidebar { width: 260px; transition: transform 0.3s ease; }
+        @media (max-width: 1023px) {
+            .sidebar { transform: translateX(-100%); position: fixed; z-index: 50; height: 100vh; }
+            .sidebar.open { transform: translateX(0); }
+        }
+
+        .nav-item { transition: all 0.2s ease; }
+        .nav-item:hover { background: #f1f5f9; }
+        .nav-item.active { background: #eef2ff; color: #4f46e5; font-weight: 600; }
+        .nav-item.active .nav-icon { color: #4f46e5; }
+
+        .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 40; }
+        .sidebar-overlay.show { display: block; }
+
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .anim-fade { animation: fadeUp 0.5s ease forwards; }
+        .anim-delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .anim-delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .anim-delay-3 { animation-delay: 0.3s; opacity: 0; }
+        .anim-delay-4 { animation-delay: 0.4s; opacity: 0; }
+
+        /* Custom select styling */
+        .custom-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+        }
+
+        /* Performance badge pulse */
+        .rank-badge {
+            animation: badgePulse 2s ease-in-out infinite;
+        }
+        @keyframes badgePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.2); }
+            50% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0); }
+        }
+
+        /* Weakness highlight */
+        .weakness-tag {
+            animation: weakPulse 1.5s ease-in-out infinite;
+        }
+        @keyframes weakPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <div class="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 z-50"></div>
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar fixed top-1 left-0 bottom-0 bg-white border-r border-slate-200 flex flex-col pt-6" id="sidebar">
+        <div class="px-6 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
+                    <i class="fas fa-flask text-sm"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm font-bold text-slate-800 leading-tight">ChemMarks</h1>
+                    <p class="text-[10px] text-slate-400 font-medium tracking-wide uppercase">Analytics</p>
+                </div>
+            </div>
+        </div>
+        <nav class="flex-1 px-3 space-y-1">
+            <p class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Analytics</p>
+            <a href="#" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm">
+                <i class="fas fa-user nav-icon text-slate-400 w-5 text-center"></i>Student Profile
+            </a>
+            <a href="#trendChart" onclick="scrollToChart('trendChart'); return false;" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-chart-line nav-icon text-slate-400 w-5 text-center"></i>Performance Trend
+            </a>
+            <a href="#breakdownChart" onclick="scrollToChart('breakdownChart'); return false;" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-chart-bar nav-icon text-slate-400 w-5 text-center"></i>Subject Breakdown
+            </a>
+            <a href="#radarChart" onclick="scrollToChart('radarChart'); return false;" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-diagram-project nav-icon text-slate-400 w-5 text-center"></i>Class Comparison
+            </a>
+            <p class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-6">Navigation</p>
+            <a href="teacher-dashboard.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-arrow-left nav-icon text-slate-400 w-5 text-center"></i>Back to Dashboard
+            </a>
+        </nav>
+        <div class="px-4 py-4 border-t border-slate-100">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-semibold text-sm" id="sidebarAvatar">T</div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-slate-800 truncate" id="sidebarName">Teacher View</p>
+                    <p class="text-xs text-slate-400" id="sidebarRole">Viewing Student Data</p>
+                </div>
+                <a href="index.html" class="text-slate-400 hover:text-red-500 transition-colors" title="Logout">
+                    <i class="fas fa-right-from-bracket text-sm"></i>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="lg:ml-[260px] pt-7">
+        <header class="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 flex items-center justify-between sticky top-1 z-30">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="lg:hidden w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors">
+                    <i class="fas fa-bars text-sm"></i>
+                </button>
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800">Student Analytics</h2>
+                    <p class="text-xs text-slate-400">Individual performance deep-dive</p>
+                </div>
+            </div>
+            <!-- Student selector -->
+            <div class="flex items-center gap-3">
+                <select id="studentSelector" onchange="loadStudent(this.value)"
+                    class="custom-select bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-700 font-medium outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 pr-8 cursor-pointer">
+                    <option value="0">Kavindu Perera</option>
+                    <option value="1">Nethmi Silva</option>
+                    <option value="2" selected>Sachini Bandara</option>
+                    <option value="3">Dinesh Fernando</option>
+                    <option value="4">Harsha Gunathilaka</option>
+                </select>
+                <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold" id="headerAvatar">T</div>
+            </div>
+        </header>
+
+        <div class="p-4 sm:p-8 space-y-6">
+
+            <!-- Student Info Card -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-5">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl font-bold shadow-lg shadow-indigo-200" id="studentAvatar">SB</div>
+                    <div class="flex-1">
+                        <div class="flex flex-wrap items-center gap-3 mb-1">
+                            <h3 class="text-xl font-bold text-slate-800" id="studentName">Sachini Bandara</h3>
+                            <span class="rank-badge inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full" id="studentRank">
+                                <i class="fas fa-medal text-[10px]"></i>Rank #5
+                            </span>
+                        </div>
+                        <p class="text-sm text-slate-400" id="studentIndex">Index: 2024/CHE/004</p>
+                    </div>
+                    <div class="flex gap-3 sm:gap-4">
+                        <div class="text-center px-4 py-2 bg-slate-50 rounded-xl">
+                            <p class="text-xs text-slate-400 font-medium">Latest Total</p>
+                            <p class="text-lg font-extrabold text-slate-800" id="latestTotal">360</p>
+                        </div>
+                        <div class="text-center px-4 py-2 bg-slate-50 rounded-xl">
+                            <p class="text-xs text-slate-400 font-medium">Latest %</p>
+                            <p class="text-lg font-extrabold text-indigo-600" id="latestPercent">72%</p>
+                        </div>
+                        <div class="text-center px-4 py-2 bg-slate-50 rounded-xl">
+                            <p class="text-xs text-slate-400 font-medium">Trend</p>
+                            <p class="text-lg font-extrabold" id="trendIndicator">
+                                <i class="fas fa-arrow-trend-up text-emerald-500"></i>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart 1: Overall Trend Line Chart -->
+            <div id="trendChart" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade anim-delay-1">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">Overall Performance Trend</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Total marks across the last 5 exams</p>
+                    </div>
+                    <span class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-lg font-medium">Paper 1 – Paper 5</span>
+                </div>
+                <div style="height: 260px;">
+                    <canvas id="trendLineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Subject Breakdown Bar Chart + Weakness Indicator -->
+            <div id="breakdownChart" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade anim-delay-2">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">Subject-Level Analysis — Latest Exam</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Percentage scored in each section (Paper 5)</p>
+                    </div>
+                    <div id="weaknessBadge" class="weakness-tag inline-flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-xs font-bold px-3 py-1.5 rounded-lg">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        <span id="weaknessText">Weak Area: Inorganic Chemistry (63.3%)</span>
+                    </div>
+                </div>
+                <div style="height: 260px;">
+                    <canvas id="breakdownBarChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 3: Radar — Compare with Class Average -->
+            <div id="radarChart" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade anim-delay-3">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">Compare with Class Average</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">Radar comparison across all paper sections</p>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs">
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span><span class="text-slate-600 font-medium" id="radarStudentLabel">Student</span></span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span><span class="text-slate-600 font-medium">Class Average</span></span>
+                    </div>
+                </div>
+                <div style="height: 320px;" class="flex justify-center">
+                    <canvas id="radarCompareChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Detailed Marks Table -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade anim-delay-4">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
+                        <i class="fas fa-table text-slate-500 text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">Detailed Marks History</h3>
+                        <p class="text-xs text-slate-400">All exam breakdowns for this student</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-100">
+                                <th class="text-left py-3 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Exam</th>
+                                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">MCQ<br><span class="font-normal normal-case">/50</span></th>
+                                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Q5 Physical<br><span class="font-normal normal-case">/150</span></th>
+                                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Q6 Inorganic<br><span class="font-normal normal-case">/150</span></th>
+                                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Q7 Organic<br><span class="font-normal normal-case">/150</span></th>
+                                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Total<br><span class="font-normal normal-case">/500</span></th>
+                                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">%</th>
+                            </tr>
+                        </thead>
+                        <tbody id="marksTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // ========================================
+        // Complete dummy student dataset
+        // ========================================
+        const students = [
+            {
+                name: "Kavindu Perera", index: "2024/CHE/001", initials: "KP", rank: 3,
+                history: [
+                    { exam: "Paper 1", mcq: 38, q5: 128, q6: 125, q7: 129 },
+                    { exam: "Paper 2", mcq: 40, q5: 132, q6: 130, q7: 133 },
+                    { exam: "Paper 3", mcq: 36, q5: 125, q6: 120, q7: 129 },
+                    { exam: "Paper 4", mcq: 42, q5: 135, q6: 133, q7: 135 },
+                    { exam: "Paper 5", mcq: 44, q5: 140, q6: 138, q7: 138 }
+                ]
+            },
+            {
+                name: "Nethmi Silva", index: "2024/CHE/002", initials: "NS", rank: 1,
+                history: [
+                    { exam: "Paper 1", mcq: 45, q5: 140, q6: 138, q7: 142 },
+                    { exam: "Paper 2", mcq: 46, q5: 142, q6: 140, q7: 145 },
+                    { exam: "Paper 3", mcq: 44, q5: 138, q6: 136, q7: 140 },
+                    { exam: "Paper 4", mcq: 47, q5: 144, q6: 142, q7: 146 },
+                    { exam: "Paper 5", mcq: 47, q5: 145, q6: 143, q7: 145 }
+                ]
+            },
+            {
+                name: "Sachini Bandara", index: "2024/CHE/004", initials: "SB", rank: 5,
+                history: [
+                    { exam: "Paper 1", mcq: 30, q5: 110, q6: 90, q7: 105 },
+                    { exam: "Paper 2", mcq: 33, q5: 115, q6: 92, q7: 110 },
+                    { exam: "Paper 3", mcq: 32, q5: 118, q6: 88, q7: 108 },
+                    { exam: "Paper 4", mcq: 34, q5: 115, q6: 90, q7: 106 },
+                    { exam: "Paper 5", mcq: 35, q5: 120, q6: 95, q7: 110 }
+                ]
+            },
+            {
+                name: "Dinesh Fernando", index: "2024/CHE/003", initials: "DF", rank: 18,
+                history: [
+                    { exam: "Paper 1", mcq: 28, q5: 95, q6: 80, q7: 90 },
+                    { exam: "Paper 2", mcq: 26, q5: 90, q6: 78, q7: 85 },
+                    { exam: "Paper 3", mcq: 25, q5: 88, q6: 75, q7: 82 },
+                    { exam: "Paper 4", mcq: 23, q5: 85, q6: 72, q7: 80 },
+                    { exam: "Paper 5", mcq: 22, q5: 80, q6: 70, q7: 78 }
+                ]
+            },
+            {
+                name: "Harsha Gunathilaka", index: "2024/CHE/007", initials: "HG", rank: 8,
+                history: [
+                    { exam: "Paper 1", mcq: 34, q5: 105, q6: 100, q7: 102 },
+                    { exam: "Paper 2", mcq: 36, q5: 108, q6: 103, q7: 105 },
+                    { exam: "Paper 3", mcq: 35, q5: 106, q6: 101, q7: 104 },
+                    { exam: "Paper 4", mcq: 37, q5: 110, q6: 104, q7: 108 },
+                    { exam: "Paper 5", mcq: 38, q5: 110, q6: 105, q7: 108 }
+                ]
+            }
+        ];
+
+        // Class averages (percentages) for radar comparison
+        const classAvgPercentages = { mcq: 65, q5: 72, q6: 65, q7: 70 };
+
+        // ========================================
+        // Chart instances (stored for updating)
+        // ========================================
+        let trendChart = null;
+        let breakdownChart = null;
+        let radarChart = null;
+
+        // ========================================
+        // Load student and render everything
+        // ========================================
+        function loadStudent(index) {
+            const s = students[index];
+            const latest = s.history[s.history.length - 1];
+            const total = latest.mcq + latest.q5 + latest.q6 + latest.q7;
+            const percent = Math.round((total / 500) * 100);
+
+            // Determine trend (comparing last 2 exams)
+            const prevTotal = s.history[s.history.length - 2].mcq + s.history[s.history.length - 2].q5 + s.history[s.history.length - 2].q6 + s.history[s.history.length - 2].q7;
+            const trending = total >= prevTotal;
+
+            // Update info card
+            document.getElementById('studentAvatar').textContent = s.initials;
+            document.getElementById('studentName').textContent = s.name;
+            document.getElementById('studentRank').innerHTML = `<i class="fas fa-medal text-[10px]"></i>Rank #${s.rank}`;
+            document.getElementById('studentIndex').textContent = `Index: ${s.index}`;
+            document.getElementById('latestTotal').textContent = total;
+            document.getElementById('latestPercent').textContent = percent + '%';
+
+            // Color the percentage
+            const percentEl = document.getElementById('latestPercent');
+            if (percent >= 80) percentEl.className = 'text-lg font-extrabold text-emerald-600';
+            else if (percent >= 60) percentEl.className = 'text-lg font-extrabold text-indigo-600';
+            else if (percent >= 40) percentEl.className = 'text-lg font-extrabold text-amber-600';
+            else percentEl.className = 'text-lg font-extrabold text-red-600';
+
+            // Trend indicator
+            const trendEl = document.getElementById('trendIndicator');
+            if (trending) {
+                trendEl.innerHTML = '<i class="fas fa-arrow-trend-up text-emerald-500"></i>';
+            } else {
+                trendEl.innerHTML = '<i class="fas fa-arrow-trend-down text-red-500"></i>';
+            }
+
+            // Radar student label
+            document.getElementById('radarStudentLabel').textContent = s.name.split(' ')[0];
+
+            // Update charts
+            renderTrendChart(s);
+            renderBreakdownChart(latest);
+            renderRadarChart(latest);
+            renderMarksTable(s);
+        }
+
+        // ========================================
+        // Chart 1: Overall Trend Line
+        // ========================================
+        function renderTrendChart(student) {
+            const labels = student.history.map(h => h.exam);
+            const totals = student.history.map(h => h.mcq + h.q5 + h.q6 + h.q7);
+
+            const ctx = document.getElementById('trendLineChart').getContext('2d');
+            if (trendChart) trendChart.destroy();
+
+            // Gradient fill
+            const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
+            gradient.addColorStop(1, 'rgba(99, 102, 241, 0.01)');
+
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total Marks',
+                        data: totals,
+                        borderColor: '#4f46e5',
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#4f46e5',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            titleFont: { family: 'Inter', size: 12, weight: '600' },
+                            bodyFont: { family: 'Inter', size: 12 },
+                            cornerRadius: 8,
+                            padding: 12,
+                            callbacks: {
+                                label: function(ctx) { return `Total: ${ctx.parsed.y} / 500`; }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: 0, max: 500,
+                            ticks: { stepSize: 100, font: { family: 'Inter', size: 11 }, color: '#94a3b8' },
+                            grid: { color: '#f1f5f9' },
+                            border: { display: false }
+                        },
+                        x: {
+                            ticks: { font: { family: 'Inter', size: 11, weight: '500' }, color: '#64748b' },
+                            grid: { display: false },
+                            border: { display: false }
+                        }
+                    },
+                    interaction: { intersect: false, mode: 'index' }
+                }
+            });
+        }
+
+        // ========================================
+        // Chart 2: Subject Breakdown Bar (lowest in red)
+        // ========================================
+        function renderBreakdownChart(latest) {
+            const sections = ['MCQ', 'Q5 — Physical', 'Q6 — Inorganic', 'Q7 — Organic'];
+            const maxMarks = [50, 150, 150, 150];
+            const marks = [latest.mcq, latest.q5, latest.q6, latest.q7];
+            const percentages = marks.map((m, i) => Math.round((m / maxMarks[i]) * 100 * 10) / 10);
+            const minPct = Math.min(...percentages);
+            const minIdx = percentages.indexOf(minPct);
+
+            // Colors: lowest bar is red, others are indigo
+            const bgColors = percentages.map((p, i) => i === minIdx ? '#ef4444' : '#6366f1');
+            const borderColors = percentages.map((p, i) => i === minIdx ? '#dc2626' : '#4f46e5');
+
+            // Update weakness badge
+            const sectionNames = ['MCQ', 'Physical Chemistry', 'Inorganic Chemistry', 'Organic Chemistry'];
+            document.getElementById('weaknessText').textContent = `Weak Area: ${sectionNames[minIdx]} (${minPct}%)`;
+
+            const ctx = document.getElementById('breakdownBarChart').getContext('2d');
+            if (breakdownChart) breakdownChart.destroy();
+
+            breakdownChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sections,
+                    datasets: [{
+                        label: 'Percentage Score',
+                        data: percentages,
+                        backgroundColor: bgColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            titleFont: { family: 'Inter', size: 12, weight: '600' },
+                            bodyFont: { family: 'Inter', size: 12 },
+                            cornerRadius: 8,
+                            padding: 12,
+                            callbacks: {
+                                label: function(ctx) {
+                                    const i = ctx.dataIndex;
+                                    return `${ctx.parsed.y}% (${marks[i]}/${maxMarks[i]})`;
+                                },
+                                afterLabel: function(ctx) {
+                                    if (ctx.dataIndex === minIdx) return '⚠ Weakest section';
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: 0, max: 100,
+                            ticks: {
+                                stepSize: 20,
+                                font: { family: 'Inter', size: 11 },
+                                color: '#94a3b8',
+                                callback: function(val) { return val + '%'; }
+                            },
+                            grid: { color: '#f1f5f9' },
+                            border: { display: false }
+                        },
+                        x: {
+                            ticks: { font: { family: 'Inter', size: 11, weight: '500' }, color: '#64748b' },
+                            grid: { display: false },
+                            border: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========================================
+        // Chart 3: Radar — Student vs Class Average
+        // ========================================
+        function renderRadarChart(latest) {
+            const studentPcts = [
+                Math.round((latest.mcq / 50) * 100),
+                Math.round((latest.q5 / 150) * 100),
+                Math.round((latest.q6 / 150) * 100),
+                Math.round((latest.q7 / 150) * 100)
+            ];
+
+            const ctx = document.getElementById('radarCompareChart').getContext('2d');
+            if (radarChart) radarChart.destroy();
+
+            radarChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['MCQ', 'Physical Chemistry', 'Inorganic Chemistry', 'Organic Chemistry'],
+                    datasets: [
+                        {
+                            label: 'Student',
+                            data: studentPcts,
+                            borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79, 70, 229, 0.12)',
+                            pointBackgroundColor: '#4f46e5',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 5,
+                            borderWidth: 2.5
+                        },
+                        {
+                            label: 'Class Average',
+                            data: [classAvgPercentages.mcq, classAvgPercentages.q5, classAvgPercentages.q6, classAvgPercentages.q7],
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                            pointBackgroundColor: '#f59e0b',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 5,
+                            borderWidth: 2.5,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1e293b',
+                            titleFont: { family: 'Inter', size: 12, weight: '600' },
+                            bodyFont: { family: 'Inter', size: 12 },
+                            cornerRadius: 8,
+                            padding: 12,
+                            callbacks: {
+                                label: function(ctx) { return `${ctx.dataset.label}: ${ctx.parsed.r}%`; }
+                            }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            min: 0, max: 100,
+                            ticks: {
+                                stepSize: 20,
+                                font: { family: 'Inter', size: 10 },
+                                color: '#94a3b8',
+                                backdropColor: 'transparent',
+                                callback: function(val) { return val + '%'; }
+                            },
+                            pointLabels: {
+                                font: { family: 'Inter', size: 12, weight: '600' },
+                                color: '#475569'
+                            },
+                            grid: { color: '#e2e8f0' },
+                            angleLines: { color: '#e2e8f0' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========================================
+        // Marks History Table
+        // ========================================
+        function renderMarksTable(student) {
+            const tbody = document.getElementById('marksTableBody');
+            tbody.innerHTML = '';
+
+            student.history.forEach((h, i) => {
+                const total = h.mcq + h.q5 + h.q6 + h.q7;
+                const pct = Math.round((total / 500) * 100);
+                const isLatest = i === student.history.length - 1;
+
+                // Color the percentage
+                let pctClass = 'text-slate-700 font-semibold';
+                if (pct >= 80) pctClass = 'text-emerald-600 font-bold';
+                else if (pct >= 60) pctClass = 'text-indigo-600 font-bold';
+                else if (pct >= 40) pctClass = 'text-amber-600 font-bold';
+                else pctClass = 'text-red-600 font-bold';
+
+                const rowBg = isLatest ? 'bg-indigo-50/50' : '';
+                const latestBadge = isLatest ? '<span class="text-[10px] bg-indigo-100 text-indigo-600 font-bold px-1.5 py-0.5 rounded ml-1">LATEST</span>' : '';
+
+                tbody.innerHTML += `
+                    <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors ${rowBg}">
+                        <td class="py-3 px-3 font-medium text-slate-800">${h.exam}${latestBadge}</td>
+                        <td class="py-3 px-3 text-center text-slate-600">${h.mcq}</td>
+                        <td class="py-3 px-3 text-center text-slate-600">${h.q5}</td>
+                        <td class="py-3 px-3 text-center text-slate-600">${h.q6}</td>
+                        <td class="py-3 px-3 text-center text-slate-600">${h.q7}</td>
+                        <td class="py-3 px-3 text-center font-bold text-slate-800">${total}</td>
+                        <td class="py-3 px-3 text-center ${pctClass}">${pct}%</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // ========================================
+        // Sidebar toggle & scroll helpers
+        // ========================================
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+
+        function scrollToChart(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (window.innerWidth < 1024) toggleSidebar();
+        }
+
+        // ========================================
+        // Initial load — default to student index 2 (Sachini Bandara)
+        // ========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStudent(2);
+        });
+    </script>
+</body>
+</html>
