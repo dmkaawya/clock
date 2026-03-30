@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Dashboard — ChemMarks Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+
+        /* Sidebar */
+        .sidebar { width: 260px; transition: transform 0.3s ease; }
+        @media (max-width: 1023px) {
+            .sidebar { transform: translateX(-100%); position: fixed; z-index: 50; height: 100vh; }
+            .sidebar.open { transform: translateX(0); }
+        }
+
+        /* Nav item active */
+        .nav-item { transition: all 0.2s ease; }
+        .nav-item:hover { background: #f1f5f9; }
+        .nav-item.active { background: #eef2ff; color: #4f46e5; font-weight: 600; }
+        .nav-item.active .nav-icon { color: #4f46e5; }
+
+        /* Card hover */
+        .stat-card { transition: all 0.25s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px -5px rgba(0,0,0,0.08); }
+
+        /* Toggle switch */
+        .toggle-track {
+            width: 44px; height: 24px; border-radius: 12px;
+            background: #cbd5e1; transition: background 0.25s ease;
+            cursor: pointer; position: relative;
+        }
+        .toggle-track.active { background: #4f46e5; }
+        .toggle-knob {
+            width: 20px; height: 20px; border-radius: 50%;
+            background: white; position: absolute; top: 2px; left: 2px;
+            transition: transform 0.25s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .toggle-track.active .toggle-knob { transform: translateX(20px); }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+        .toast {
+            background: white; border-radius: 12px; padding: 14px 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.12); border-left: 4px solid #10b981;
+            display: flex; align-items: center; gap: 10px; font-size: 14px;
+            animation: toastIn 0.35s ease forwards;
+            min-width: 300px;
+        }
+        .toast.removing { animation: toastOut 0.3s ease forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
+
+        /* Weak student row */
+        .weak-row { transition: all 0.2s ease; }
+        .weak-row:hover { background: #fef2f2 !important; }
+
+        /* Fade in animation */
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .anim-fade { animation: fadeUp 0.5s ease forwards; }
+        .anim-delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .anim-delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .anim-delay-3 { animation-delay: 0.3s; opacity: 0; }
+        .anim-delay-4 { animation-delay: 0.4s; opacity: 0; }
+
+        /* Overlay */
+        .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 40; }
+        .sidebar-overlay.show { display: block; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <!-- Brand bar -->
+    <div class="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 z-50"></div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Sidebar overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar fixed top-1 left-0 bottom-0 bg-white border-r border-slate-200 flex flex-col pt-6" id="sidebar">
+        <!-- Brand -->
+        <div class="px-6 mb-8">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
+                    <i class="fas fa-flask text-sm"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm font-bold text-slate-800 leading-tight">ChemMarks</h1>
+                    <p class="text-[10px] text-slate-400 font-medium tracking-wide uppercase">Analytics</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="flex-1 px-3 space-y-1">
+            <p class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Main</p>
+            <a href="#" class="nav-item active flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm">
+                <i class="fas fa-th-large nav-icon text-slate-400 w-5 text-center"></i>Dashboard
+            </a>
+            <a href="student-profile.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-chart-line nav-icon text-slate-400 w-5 text-center"></i>Student Analytics
+            </a>
+            <a href="staff-dashboard.html" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-keyboard nav-icon text-slate-400 w-5 text-center"></i>Staff Data Entry
+            </a>
+
+            <p class="px-3 text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-6">System</p>
+            <a href="#settings" onclick="scrollToSettings()" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600">
+                <i class="fas fa-gear nav-icon text-slate-400 w-5 text-center"></i>Settings
+            </a>
+        </nav>
+
+        <!-- User info -->
+        <div class="px-4 py-4 border-t border-slate-100">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-semibold text-sm">T</div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-slate-800 truncate">Mr. Rajapaksa</p>
+                    <p class="text-xs text-slate-400">Chemistry Teacher</p>
+                </div>
+                <a href="index.html" class="text-slate-400 hover:text-red-500 transition-colors" title="Logout">
+                    <i class="fas fa-right-from-bracket text-sm"></i>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="lg:ml-[260px] pt-7">
+        <!-- Top bar -->
+        <header class="bg-white border-b border-slate-200 px-4 sm:px-8 py-4 flex items-center justify-between sticky top-1 z-30">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="lg:hidden w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors">
+                    <i class="fas fa-bars text-sm"></i>
+                </button>
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800">Dashboard</h2>
+                    <p class="text-xs text-slate-400">Welcome back, Mr. Rajapaksa</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="hidden sm:inline text-xs text-slate-400 bg-slate-50 px-3 py-1.5 rounded-lg">
+                    <i class="fas fa-calendar-day mr-1.5"></i><span id="currentDate"></span>
+                </span>
+                <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">T</div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <div class="p-4 sm:p-8 space-y-8">
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                <!-- Total Students -->
+                <div class="stat-card bg-white rounded-2xl p-5 border border-slate-100 shadow-sm anim-fade">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Total Students</p>
+                            <p class="text-3xl font-extrabold text-slate-800 mt-1">32</p>
+                            <p class="text-xs text-emerald-600 font-medium mt-2"><i class="fas fa-arrow-up mr-1"></i>+4 from last term</p>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-indigo-50 flex items-center justify-center">
+                            <i class="fas fa-users text-indigo-500"></i>
+                        </div>
+                    </div>
+                </div>
+                <!-- Average Mark -->
+                <div class="stat-card bg-white rounded-2xl p-5 border border-slate-100 shadow-sm anim-fade anim-delay-1">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Class Average</p>
+                            <p class="text-3xl font-extrabold text-slate-800 mt-1">347<span class="text-lg text-slate-400 font-medium">/500</span></p>
+                            <p class="text-xs text-emerald-600 font-medium mt-2"><i class="fas fa-arrow-up mr-1"></i>+12 from Paper 4</p>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center">
+                            <i class="fas fa-chart-simple text-emerald-500"></i>
+                        </div>
+                    </div>
+                </div>
+                <!-- Highest Mark -->
+                <div class="stat-card bg-white rounded-2xl p-5 border border-slate-100 shadow-sm anim-fade anim-delay-2">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Highest Mark</p>
+                            <p class="text-3xl font-extrabold text-slate-800 mt-1">480<span class="text-lg text-slate-400 font-medium">/500</span></p>
+                            <p class="text-xs text-slate-500 font-medium mt-2"><i class="fas fa-user mr-1"></i>Nethmi Silva</p>
+                        </div>
+                        <div class="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center">
+                            <i class="fas fa-trophy text-amber-500"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Class Performance Chart + Quick Actions -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Class performance distribution -->
+                <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade anim-delay-3">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-800">Class Performance Distribution</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Paper 5 — Mark range distribution</p>
+                        </div>
+                        <span class="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg font-medium">Latest Exam</span>
+                    </div>
+                    <div style="height: 220px;">
+                        <canvas id="distributionChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 anim-fade anim-delay-4">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4">Quick Actions</h3>
+                    <div class="space-y-3">
+                        <a href="student-profile.html" class="flex items-center gap-3 p-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 transition-colors group">
+                            <div class="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+                                <i class="fas fa-chart-line text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-800">View Student Analytics</p>
+                                <p class="text-xs text-slate-400">Deep-dive into individual data</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-slate-300 ml-auto group-hover:text-indigo-400 transition-colors text-xs"></i>
+                        </a>
+                        <a href="staff-dashboard.html" class="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors group">
+                            <div class="w-9 h-9 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+                                <i class="fas fa-keyboard text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-800">Staff Data Entry</p>
+                                <p class="text-xs text-slate-400">Bulk upload or manual entry</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-slate-300 ml-auto group-hover:text-emerald-400 transition-colors text-xs"></i>
+                        </a>
+                        <a href="#" onclick="scrollToSettings(); return false;" class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors group">
+                            <div class="w-9 h-9 rounded-lg bg-slate-600 text-white flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+                                <i class="fas fa-gear text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-800">System Settings</p>
+                                <p class="text-xs text-slate-400">Toggles and configuration</p>
+                            </div>
+                            <i class="fas fa-chevron-right text-slate-300 ml-auto group-hover:text-slate-400 transition-colors text-xs"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Weak Students Alert -->
+            <div class="bg-white rounded-2xl border border-red-100 shadow-sm overflow-hidden anim-fade">
+                <div class="bg-gradient-to-r from-red-500 to-rose-500 px-6 py-4 flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center">
+                        <i class="fas fa-triangle-exclamation text-white"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Weak Students Alert</h3>
+                        <p class="text-xs text-red-100">Students with consecutively dropping marks over the last 3 exams</p>
+                    </div>
+                    <span class="ml-auto bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-lg">4 Students</span>
+                </div>
+                <div class="divide-y divide-red-50">
+                    <!-- Weak student 1 -->
+                    <div class="weak-row flex items-center gap-4 px-6 py-4 bg-red-50/40 cursor-pointer">
+                        <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm">DF</div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-slate-800">Dinesh Fernando</p>
+                            <p class="text-xs text-slate-400">Index: 2024/CHE/003</p>
+                        </div>
+                        <div class="hidden sm:flex items-center gap-2">
+                            <span class="text-xs text-slate-500">Paper 3</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">320</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 4</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">310</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 5</span>
+                            <span class="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">295</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-red-600">
+                            <i class="fas fa-arrow-trend-down text-sm"></i>
+                            <span class="text-xs font-bold">-25</span>
+                        </div>
+                    </div>
+                    <!-- Weak student 2 -->
+                    <div class="weak-row flex items-center gap-4 px-6 py-4 bg-red-50/40 cursor-pointer">
+                        <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm">TJ</div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-slate-800">Tharindu Jayawardena</p>
+                            <p class="text-xs text-slate-400">Index: 2024/CHE/005</p>
+                        </div>
+                        <div class="hidden sm:flex items-center gap-2">
+                            <span class="text-xs text-slate-500">Paper 3</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">300</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 4</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">285</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 5</span>
+                            <span class="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">270</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-red-600">
+                            <i class="fas fa-arrow-trend-down text-sm"></i>
+                            <span class="text-xs font-bold">-30</span>
+                        </div>
+                    </div>
+                    <!-- Weak student 3 -->
+                    <div class="weak-row flex items-center gap-4 px-6 py-4 bg-red-50/40 cursor-pointer">
+                        <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm">AW</div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-slate-800">Amaya Wijesinghe</p>
+                            <p class="text-xs text-slate-400">Index: 2024/CHE/011</p>
+                        </div>
+                        <div class="hidden sm:flex items-center gap-2">
+                            <span class="text-xs text-slate-500">Paper 3</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">280</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 4</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">265</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 5</span>
+                            <span class="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">250</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-red-600">
+                            <i class="fas fa-arrow-trend-down text-sm"></i>
+                            <span class="text-xs font-bold">-30</span>
+                        </div>
+                    </div>
+                    <!-- Weak student 4 -->
+                    <div class="weak-row flex items-center gap-4 px-6 py-4 bg-red-50/40 cursor-pointer">
+                        <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm">RD</div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-slate-800">Ruwan Dissanayake</p>
+                            <p class="text-xs text-slate-400">Index: 2024/CHE/015</p>
+                        </div>
+                        <div class="hidden sm:flex items-center gap-2">
+                            <span class="text-xs text-slate-500">Paper 3</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">310</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 4</span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">295</span>
+                            <i class="fas fa-arrow-right text-[10px] text-red-400"></i>
+                            <span class="text-xs text-slate-500">Paper 5</span>
+                            <span class="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded">280</span>
+                        </div>
+                        <div class="flex items-center gap-1 text-red-600">
+                            <i class="fas fa-arrow-trend-down text-sm"></i>
+                            <span class="text-xs font-bold">-30</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Section -->
+            <div id="settings" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
+                        <i class="fas fa-gear text-slate-500"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">System Settings</h3>
+                        <p class="text-xs text-slate-400">Configure portal features and notifications</p>
+                    </div>
+                </div>
+                <div class="space-y-5">
+                    <!-- Toggle 1: Student Portal -->
+                    <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center">
+                                <i class="fas fa-graduation-cap text-amber-600 text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-800">Enable Student Portal</p>
+                                <p class="text-xs text-slate-400">Allow students to view their own analytics and marks</p>
+                            </div>
+                        </div>
+                        <div class="toggle-track active" onclick="toggleSwitch(this, 'Student Portal')">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                    <!-- Toggle 2: WhatsApp Alerts -->
+                    <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center">
+                                <i class="fab fa-whatsapp text-green-600 text-sm"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-800">Enable Automated WhatsApp SMS Alerts</p>
+                                <p class="text-xs text-slate-400">Send mark reports to parents via WhatsApp after each exam</p>
+                            </div>
+                        </div>
+                        <div class="toggle-track" onclick="toggleSwitch(this, 'WhatsApp Alerts')">
+                            <div class="toggle-knob"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Display current date
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
+            weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+        });
+
+        // Sidebar toggle
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+
+        // Scroll to settings
+        function scrollToSettings() {
+            document.getElementById('settings').scrollIntoView({ behavior: 'smooth' });
+            // Close sidebar on mobile
+            if (window.innerWidth < 1024) toggleSidebar();
+        }
+
+        // Toggle switch with toast
+        function toggleSwitch(el, featureName) {
+            el.classList.toggle('active');
+            const state = el.classList.contains('active') ? 'enabled' : 'disabled';
+            showToast(`${featureName} has been ${state} successfully.`, state === 'enabled' ? 'success' : 'info');
+        }
+
+        // Toast notification system
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            const borderColor = type === 'success' ? '#10b981' : type === 'info' ? '#6366f1' : '#ef4444';
+            const iconClass = type === 'success' ? 'fa-circle-check text-emerald-500' : type === 'info' ? 'fa-circle-info text-indigo-500' : 'fa-circle-xmark text-red-500';
+            toast.style.borderLeftColor = borderColor;
+            toast.innerHTML = `<i class="fas ${iconClass}"></i><span class="text-slate-700">${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('removing');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Distribution Chart — class mark ranges
+        const distCtx = document.getElementById('distributionChart').getContext('2d');
+        new Chart(distCtx, {
+            type: 'bar',
+            data: {
+                labels: ['0–100', '101–200', '201–300', '301–350', '351–400', '401–450', '451–500'],
+                datasets: [{
+                    label: 'Number of Students',
+                    data: [0, 2, 6, 8, 9, 5, 2],
+                    backgroundColor: [
+                        '#fef2f2', '#fee2e2', '#fecaca',
+                        '#c7d2fe', '#a5b4fc',
+                        '#818cf8', '#6366f1'
+                    ],
+                    borderColor: [
+                        '#fca5a5', '#fca5a5', '#fca5a5',
+                        '#818cf8', '#818cf8',
+                        '#818cf8', '#6366f1'
+                    ],
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    barPercentage: 0.7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1e293b',
+                        titleFont: { family: 'Inter', size: 12 },
+                        bodyFont: { family: 'Inter', size: 12 },
+                        cornerRadius: 8,
+                        padding: 10,
+                        callbacks: {
+                            label: function(ctx) { return ctx.parsed.y + ' students'; }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 2, font: { family: 'Inter', size: 11 }, color: '#94a3b8' },
+                        grid: { color: '#f1f5f9' },
+                        border: { display: false }
+                    },
+                    x: {
+                        ticks: { font: { family: 'Inter', size: 11 }, color: '#94a3b8' },
+                        grid: { display: false },
+                        border: { display: false }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
